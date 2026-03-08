@@ -256,14 +256,19 @@ end)
 local repeat_command_seq = key_sequence.create({ G, MINUS }, function ()
     diversion.spawn("nc", { "127.0.0.1", "7821" })("run")
 end)
+function switch_to_audio_output(port)
+    print("switching to " .. port)
+    execute("amixer", { "-c", "Generic", "set", "Auto-Mute Mode", "Disabled" }):next(function(output) print(output.code, output.stderr, output.stdout) end)
+    execute("pactl", { "set-sink-port", "alsa_output.pci-0000_0a_00.4.analog-stereo", port }):next(function(output) print(output.code, output.stderr, output.stdout) end)
+end
+local HEADPHONES = "analog-output-lineout"
+local SPEAKERS = "analog-output-headphones"
 local switch_audio_output_seq = key_sequence.create({ G, SLASH }, (function()
-    local ports = { "analog-output-lineout", "analog-output-headphones" }
+    local ports = { HEADPHONES, SPEAKERS }
     local current = ports[1]
     return function()
         local port = ports[current == ports[1] and 2 or 1]
-        print("switching to " .. port)
-        execute("amixer", { "-c", "Generic", "set", "Auto-Mute Mode", "Disabled" }, function(output) print(output.code, output.stderr, output.stdout) end)
-        execute("pactl", { "set-sink-port", "alsa_output.pci-0000_0a_00.4.analog-stereo", port }, function(output) print(output.code, output.stderr, output.stdout) end)
+        switch_to_audio_output(port)
         current = port
     end
 end)())
@@ -279,7 +284,9 @@ local sequences = {
     },
 }
 
-swap_keys(KEYBOARD, ESCAPE, CAPS_LOCK)
+if hostname == "nixos-lati" then
+    swap_keys(KEYBOARD, ESCAPE, CAPS_LOCK)
+end
 
 local sequence_driver = key_sequence.driver(sequences)
 local function on_event(device, ty, code, value, time)
@@ -311,4 +318,5 @@ print("started at", os.date("%Y-%m-%d %H:%M:%S"))
 execute("whoami", {}):next(function(output)
     print("running as user", output.stdout)
 end)
+switch_to_audio_output(HEADPHONES)
 util.notify_send("Diversion started!")
