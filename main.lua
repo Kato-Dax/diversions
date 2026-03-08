@@ -6,6 +6,12 @@ local util = require 'util'
 local execute = diversion.execute
 local send_event = diversion.send_event
 
+local hostname = nil
+
+execute("hostname", {}):next(function (result)
+    hostname = result.stdout:gsub("%s+", "")
+end)
+
 KEYS_DOWN = {}
 
 local rev_mouse = false
@@ -30,6 +36,16 @@ local function create_mouse_callback(device, key, axis, direction)
     end
 end
 
+local function send_if_other_down(device, other, normal, special)
+    return function(value)
+        if KEYS_DOWN[device][other] then
+            send_event(EV_KEY, special, value)
+        else
+            send_event(EV_KEY, normal, value)
+        end
+    end
+end
+
 DISABLED = function() end
 
 KEYBOARD = 0
@@ -43,6 +59,7 @@ OVERRIDES = {
             [R_FN] = DISABLED,
             [L_PIPE] = DISABLED,
             [MENU] = DISABLED,
+            [L_ALT] = DISABLED,
             [D] = function(value)
                 if not KEYS_DOWN[KEYBOARD][L_PIPE] then
                     send_event(EV_KEY, D, value)
@@ -102,13 +119,14 @@ OVERRIDES = {
                     send_event(EV_KEY, SEMICOLON, value)
                 end
             end,
-            [L_ALT] = function(value)
-                send_event(EV_KEY, L_ALT, value)
-            end,
-            [H] = create_mouse_callback(KEYBOARD, H, X_AXIS, -1),
-            [J] = create_mouse_callback(KEYBOARD, J, Y_AXIS, 1),
-            [L] = create_mouse_callback(KEYBOARD, L, X_AXIS, 1),
-            [K] = create_mouse_callback(KEYBOARD, K, Y_AXIS, -1),
+            [H] = send_if_other_down(KEYBOARD, L_ALT, H, LEFT),
+            [J] = send_if_other_down(KEYBOARD, L_ALT, J, DOWN),
+            [K] = send_if_other_down(KEYBOARD, L_ALT, K, UP),
+            [L] = send_if_other_down(KEYBOARD, L_ALT, L, RIGHT),
+            [O] = send_if_other_down(KEYBOARD, L_ALT, O, HOME),
+            [M] = send_if_other_down(KEYBOARD, L_ALT, M, END),
+            [SEMICOLON] = send_if_other_down(KEYBOARD, L_ALT, SEMICOLON, DELETE),
+            [N] = send_if_other_down(KEYBOARD, L_ALT, N, BACKSPACE),
             [VOL_DOWN] = function(value)
                 if KEYS_DOWN[KEYBOARD][L_CTRL] then
                     util.change_sink_volume("Spotify", '-5%')
@@ -129,7 +147,27 @@ OVERRIDES = {
                 else
                     send_event(EV_KEY, PAUSE_BREAK, value)
                 end
-            end
+            end,
+            [ENTER] = (function()
+                local down_timestamp = 0
+                return function(value, time)
+                    if hostname ~= "nixos-lati" then
+                        return send_event(EV_KEY, ENTER, value)
+                    end
+                    if value == 1 then
+                        down_timestamp = time
+                        send_event(EV_KEY, R_SHIFT, 1)
+                    end
+                    if value == 0 then
+                        send_event(EV_KEY, R_SHIFT, 0)
+                        if time - down_timestamp < 0.2 then
+                            send_event(EV_KEY, ENTER, 1)
+                            send_event(EV_KEY, ENTER, 0)
+                        end
+                    end
+                end
+            end)(),
+            [R_SHIFT] = function(value) send_event(EV_KEY, L_ALT, value) end
         }
     },
     [PUGIO] = {
@@ -241,11 +279,10 @@ local sequences = {
     },
 }
 
--- swap_keys(KEYBOARD, L_SHIFT, L_ALT)
 swap_keys(KEYBOARD, ESCAPE, CAPS_LOCK)
 
 local sequence_driver = key_sequence.driver(sequences)
-local function on_event(device, ty, code, value)
+local function on_event(device, ty, code, value, time)
     local keys_down = KEYS_DOWN[device]
     if ty == EV_KEY then
         keys_down[code] = value ~= 0
@@ -261,7 +298,7 @@ local function on_event(device, ty, code, value)
         if ty_override ~= nil then
             local override = ty_override[code]
             if override ~= nil then
-                override(value)
+                override(value, time)
                 return
             end
         end
