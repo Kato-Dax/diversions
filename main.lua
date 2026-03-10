@@ -8,10 +8,6 @@ local send_event = diversion.send_event
 
 local hostname = nil
 
-execute("hostname", {}):next(function (result)
-    hostname = result.stdout:gsub("%s+", "")
-end)
-
 KEYS_DOWN = {}
 
 local rev_mouse = false
@@ -257,6 +253,9 @@ local repeat_command_seq = key_sequence.create({ G, MINUS }, function ()
     diversion.spawn("nc", { "127.0.0.1", "7821" })("run")
 end)
 function switch_to_audio_output(port)
+    if hostname ~= "nixos-desktop" then
+        return
+    end
     print("switching to " .. port)
     execute("amixer", { "-c", "Generic", "set", "Auto-Mute Mode", "Disabled" }):next(function(output) print(output.code, output.stderr, output.stdout) end)
     execute("pactl", { "set-sink-port", "alsa_output.pci-0000_0a_00.4.analog-stereo", port }):next(function(output) print(output.code, output.stderr, output.stdout) end)
@@ -284,10 +283,6 @@ local sequences = {
     },
 }
 
-if hostname == "nixos-lati" then
-    swap_keys(KEYBOARD, ESCAPE, CAPS_LOCK)
-end
-
 local sequence_driver = key_sequence.driver(sequences)
 local function on_event(device, ty, code, value, time)
     local keys_down = KEYS_DOWN[device]
@@ -313,10 +308,17 @@ local function on_event(device, ty, code, value, time)
     send_event(ty, code, value)
 end
 
+execute("hostname", {}):next(function (result)
+    hostname = result.stdout:gsub("%s+", "")
+    if hostname == "nixos-lati" then
+        swap_keys(KEYBOARD, ESCAPE, CAPS_LOCK)
+    end
+    switch_to_audio_output(HEADPHONES)
+end)
+
 diversion.listen(on_event)
 print("started at", os.date("%Y-%m-%d %H:%M:%S"))
 execute("whoami", {}):next(function(output)
     print("running as user", output.stdout)
 end)
-switch_to_audio_output(HEADPHONES)
 util.notify_send("Diversion started!")
