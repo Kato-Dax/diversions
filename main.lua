@@ -137,7 +137,7 @@ function main(hostname)
                 [J] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, J, DOWN) or nil,
                 [K] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, K, UP) or nil,
                 [L] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, L, RIGHT) or nil,
-                [O] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, O, HOME) or nil,
+                [ZERO] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, ZERO, HOME) or nil,
                 [M] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, M, END) or nil,
                 [SEMICOLON] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, SEMICOLON, DELETE) or nil,
                 [N] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, N, BACKSPACE) or nil,
