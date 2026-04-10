@@ -141,6 +141,7 @@ function main(hostname)
                 [M] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, M, END) or nil,
                 [SEMICOLON] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, SEMICOLON, DELETE) or nil,
                 [N] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, N, BACKSPACE) or nil,
+                [FOUR] = hostname == "nixos-lati" and send_if_other_down(KEYBOARD, L_ALT, FOUR, F4) or nil,
                 [VOL_DOWN] = function(value)
                     if KEYS_DOWN[KEYBOARD][L_CTRL] then
                         util.change_sink_volume("Spotify", '-5%')
