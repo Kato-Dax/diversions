@@ -304,13 +304,37 @@ function main(hostname)
     SEQUENCE_DRIVER = key_sequence.driver(sequences)
 end
 
+local send_to_remote = nil
+
+local remote = "192.168.1.251:12002"
+
 local function on_event(device, ty, code, value, time)
     local keys_down = KEYS_DOWN[device]
     if ty == EV_KEY then
         keys_down[code] = value ~= 0
     end
+
+    if send_event ~= diversion.send_event then
+        if ty == EV_KEY and code == INSERT and value == 0 then
+            send_to_remote(diversion.eof)
+            send_event = diversion.send_event
+            return
+        end
+    else
+        if ty == EV_KEY and code == DELETE and value == 1 then
+            util.notify_send("connecting to " .. remote)
+            send_to_remote = diversion.spawn("websocat", { "ws://" .. remote }, print, print, function(code)
+                util.notify_send("disconnected from " .. remote .. " (" .. code .. ")")
+                send_event = diversion.send_event
+                send_to_remote = nil
+            end)
+            send_event = function(ty, code, value)
+                send_to_remote(ty .. " " .. code .. " " .. value .. "\n")
+            end
+        end
+    end
+
     if keys_down[INSERT] then
-        print(ty, code, value)
         return
     end
     if SEQUENCE_DRIVER and SEQUENCE_DRIVER(device, ty, code, value) then return end
@@ -341,4 +365,54 @@ end):next(function(info)
     print("running as user", info.user)
     util.notify_send("Diversion started!")
 end)
+
+function collect(f)
+    t = {}
+    local f, s, v = f()
+    while true do
+        v = f(s, v)
+        if v == nil then break end
+        table.insert(t, v)
+    end
+    return t
+end
+
+function spawn_listen()
+    local buf = ""
+    local connected = false
+    diversion.spawn("websocat", { "-s", "0.0.0.0:12002", "-E", "--oneshot" }, function (chunk)
+        if not connected then
+            util.notify_send("receiving remote input")
+        end
+        connected = true
+        buf = buf .. chunk
+        while true do
+            local newline_index = string.find(buf, "\n")
+            if newline_index == nil then
+                return
+            end
+            msg = buf.sub(buf, 0, newline_index)
+            buf = buf.sub(buf, newline_index + 1)
+            local sections = collect(function () return string.gmatch(msg, "([^ ]+)") end)
+            if #sections ~= 3 then
+                print("failed to parse msg: " .. msg)
+                return
+            end
+            ty, code, value = tonumber(sections[1]), tonumber(sections[2]), tonumber(sections[3])
+            if ty == nil or code == nil or value == nil then
+                print("failed to parse msg: " .. msg)
+                return
+            end
+            send_event(ty, code, value)
+        end
+    end, function(chunk)
+        print("websocat stderr: " .. chunk)
+    end, function(exit_code)
+        util.notify_send("remote input disconnected (" .. exit_code .. ")")
+        if exit_code == 0 then
+            spawn_listen()
+        end
+    end)
+end
+spawn_listen()
 
